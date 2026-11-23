@@ -1,0 +1,19 @@
+{
+  "name": "track-my-happiness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TrackMyHappiness — Global parcel tracker mobile app & background AWB notification engine",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:mobile": "npm --prefix mobile run start",
+    "dev:web": "npm --prefix mobile run web",
+    "build:backend": "npm --prefix backend run build",
+    "build:web": "npm --prefix mobile run export:web",
+    "build:all": "npm run build:backend && npm run build:web",
+    "start:prod": "npm --prefix backend run start:prod",
+    "build:android-apk": "npm --prefix mobile exec -- eas build --platform android --profile preview",
+    "test:backend": "npm --prefix backend test",
+    "typecheck:backend": "npm --prefix backend run typecheck",
+    "typecheck:mobile": "npm --prefix mobile run typecheck"
+  }
+}

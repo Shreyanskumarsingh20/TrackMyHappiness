@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+backend/dist/
+mobile/.expo/
+mobile/.expo-home/
+mobile/dist/
+mobile/web-build/
+
+# Runtime data & secrets
+backend/.env
+backend/data/
+*.db
+*.db-journal
+*.db-wal
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+*.log

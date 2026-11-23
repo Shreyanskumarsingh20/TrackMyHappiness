@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "TrackMyHappiness",
+    "slug": "track-my-happiness",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "trackmyhappiness",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F766E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.trackmyhappiness.app"
+    },
+    "android": {
+      "package": "com.trackmyhappiness.app",
+      "versionCode": 1,
+      "permissions": [
+        "POST_NOTIFICATIONS"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F766E"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#0F766E"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

@@ -1,0 +1,13 @@
+**/node_modules
+backend/dist
+backend/data
+backend/.env
+mobile/.expo
+mobile/.expo-home
+mobile/dist
+mobile/web-build
+.git
+*.log
+*.db
+*.db-wal
+*.db-shm

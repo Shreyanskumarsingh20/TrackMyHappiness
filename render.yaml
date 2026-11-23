@@ -1,0 +1,32 @@
+# One-click Render Blueprint for TrackMyHappiness (24/7 Backend + Web App)
+# Connect your GitHub repo at https://dashboard.render.com/blueprints
+services:
+  - type: web
+    name: trackmyhappiness
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    disk:
+      name: trackmyhappiness-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: DB_PATH
+        value: /data/trackmyhappiness.db
+      - key: TRACKING_PROVIDER
+        value: free_direct
+      - key: POLL_INTERVAL_MINUTES
+        value: "30"
+      - key: DEFAULT_DESTINATION_COUNTRY
+        value: India
+      - key: SEED_DEMO_PARCELS
+        value: "false"
+      # Optional $0 Free-Tier Keys (enter in Render Dashboard after deploy)
+      - key: WHEREPARCEL_API_KEY
+        sync: false
+      - key: DHL_API_KEY
+        sync: false
