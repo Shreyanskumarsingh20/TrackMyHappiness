@@ -265,11 +265,11 @@ describe('Free Direct Live Parsers & Carrier Deep-Links', () => {
     assert.ok(buildCarrierTrackingUrl('unknown', 'ABC123456').includes('17track.net'));
   });
 
-  it('orders same-minute Japan Post events deterministically so Customs beats Arrival', () => {
+  it('orders same-minute Japan Post events deterministically so Customs beats Arrival', async () => {
     const store = new AppStore(':memory:');
     try {
       const now = new Date().toISOString();
-      store.createParcel({
+      await store.createParcel({
         id: 'jp-tie-test',
         awb: 'LP107964364JP',
         carrierCode: 'japanpost',
@@ -300,7 +300,7 @@ describe('Free Direct Live Parsers & Carrier Deep-Links', () => {
         updatedAt: now,
       });
 
-      store.insertEventIfNew({
+      await store.insertEventIfNew({
         parcelId: 'jp-tie-test',
         occurredAt: '2026-11-17T08:34:00.000Z',
         location: 'MUMBAI AIRPORT SORTING OFFICE, INDIA',
@@ -311,7 +311,7 @@ describe('Free Direct Live Parsers & Carrier Deep-Links', () => {
         stage: 'in_transit',
         importance: 'important',
       });
-      store.insertEventIfNew({
+      await store.insertEventIfNew({
         parcelId: 'jp-tie-test',
         occurredAt: '2026-11-17T08:34:00.000Z',
         location: 'MUMBAI AIRPORT SORTING OFFICE, INDIA',
@@ -323,7 +323,7 @@ describe('Free Direct Live Parsers & Carrier Deep-Links', () => {
         importance: 'important',
       });
       // Repeated customs scan 5 minutes later updates timestamp to 08:39
-      store.insertEventIfNew({
+      await store.insertEventIfNew({
         parcelId: 'jp-tie-test',
         occurredAt: '2026-11-17T08:39:00.000Z',
         location: 'MUMBAI AIRPORT SORTING OFFICE, INDIA',
@@ -335,12 +335,12 @@ describe('Free Direct Live Parsers & Carrier Deep-Links', () => {
         importance: 'important',
       });
 
-      const events = store.getEventsForParcel('jp-tie-test');
+      const events = await store.getEventsForParcel('jp-tie-test');
       assert.equal(events.length, 2);
       assert.equal(events[0].stage, 'customs');
       assert.equal(events[0].occurredAt, '2026-11-17T08:39:00.000Z');
     } finally {
-      store.close();
+      await store.close();
     }
   });
 });
@@ -348,7 +348,7 @@ describe('Free Direct Live Parsers & Carrier Deep-Links', () => {
 describe('REST API & Full Parcel Lifecycle (SQLite in-memory)', () => {
   it('creates parcel, advances simulator milestones, filters minor alerts, syncs renamed titles, and handles webhooks', async () => {
     const store = new AppStore(':memory:');
-    store.updateSettings({ activeProvider: 'simulator' });
+    await store.updateSettings({ activeProvider: 'simulator' });
     const tracker = new TrackerService(store);
     const app = createApp(store, tracker);
 
@@ -444,8 +444,13 @@ describe('REST API & Full Parcel Lifecycle (SQLite in-memory)', () => {
       assert.equal(settingsRes.status, 200);
       assert.equal(settingsRes.json.settings.defaultDestinationCountry, 'United States');
       assert.equal(settingsRes.json.settings.notificationRules.muteMinorHubScans, false);
+
+      // 8. Verify serverless cron poll endpoint works cleanly
+      const cronRes = await invokeApp(app, 'GET', '/api/cron/poll');
+      assert.equal(cronRes.status, 200);
+      assert.equal(cronRes.json.ok, true);
     } finally {
-      store.close();
+      await store.close();
     }
   });
 });

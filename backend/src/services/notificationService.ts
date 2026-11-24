@@ -1,4 +1,4 @@
-import { AppStore } from '../db/store.js';
+import { IAppStore } from '../db/types.js';
 import { AlertItem, NotificationRules, Parcel, TrackingEvent } from '../types.js';
 
 export function shouldNotifyForEvent(
@@ -82,14 +82,14 @@ export function buildHumanNotification(parcel: Parcel, event: TrackingEvent): { 
 }
 
 export class NotificationService {
-  constructor(private store: AppStore) {}
+  constructor(private store: IAppStore) {}
 
   async emitUpdateIfImportant(
     parcel: Parcel,
     event: TrackingEvent,
     options?: { suppressPush?: boolean }
   ): Promise<AlertItem | null> {
-    const settings = this.store.getSettings();
+    const settings = await this.store.getSettings();
     const shouldAlert = shouldNotifyForEvent(event, settings.notificationRules, parcel.muted);
     if (!shouldAlert) return null;
 
@@ -120,9 +120,9 @@ export class NotificationService {
     body: string,
     data: Record<string, unknown>
   ): Promise<boolean> {
-    const tokens = this.store
-      .listPushTokens()
-      .filter((t) => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken['));
+    const tokens = (await this.store.listPushTokens()).filter(
+      (t) => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[')
+    );
 
     if (tokens.length === 0) return false;
 

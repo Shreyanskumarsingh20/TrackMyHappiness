@@ -1,73 +1,44 @@
-# Shipping TrackMyHappiness v1.0.0 🚀
+# Shipping TrackMyHappiness on Vercel + Android APK ($0 Stack) 🚀
 
-This guide walks you through shipping **both** halves of TrackMyHappiness:
-1. Your **24/7 Tracking Backend + Web App** (runs continuously in the cloud so your AWBs stay watched and push notifications arrive even when your laptop is off).
-2. Your **Installable Android `.apk`** (built free via Expo EAS Build — install directly on your Android phone with real push alerts, zero Google Play fee).
+## 1. Deploy Everything to Vercel (Free Hobby Plan — $0)
 
----
+TrackMyHappiness is configured for **single-project full-stack Vercel deployment** via `vercel.json`:
+- **Frontend (Expo Web App):** Served globally from `mobile/dist` on Vercel CDN
+- **Backend API (`/api/*`):** Runs as a Vercel Serverless Function (`api/index.mjs`)
+- **Automatic Persistent Database:** Uses PostgreSQL automatically whenever `DATABASE_URL` or `POSTGRES_URL` is set (supports Vercel's 1-click free **Neon Postgres** storage!)
 
-## Step 1 — Push Repo to GitHub
+### Deploy via Vercel Dashboard (Recommended — Auto-Deploys on Every Git Push)
+1. Open **[vercel.com/new](https://vercel.com/new)** and sign in with GitHub (`Shreyanskumarsingh20`).
+2. Import **`Shreyanskumarsingh20/TrackMyHappiness`** and click **Deploy** (Vercel reads `vercel.json` automatically).
+3. **Add Free Persistent Database (So Parcels Never Reset!):**
+   - Inside your new Vercel project → **Storage** tab → **Create Database** → pick **Neon (Serverless Postgres — Free 0.5 GB)** → connect it to your project.
+   - Vercel automatically injects `DATABASE_URL` / `POSTGRES_URL` — click **Redeploy** once and verify `/api/health` shows `"storage": "postgres-persistent"`.
+4. **Optional 30-Minute 24/7 Background Polling ($0 via GitHub Actions):**
+   - Vercel Hobby runs the built-in daily cron (`0 8 * * *`) automatically.
+   - For **every-30-minute** checks 24/7 at $0: in your GitHub repo go to **Settings → Secrets and variables → Actions → Variables** → add `APP_URL` = `https://<your-vercel-domain>.vercel.app`. `.github/workflows/poll-parcels.yml` runs automatically!
 
-Your project is already initialized as a clean Git repository (`v1.0.0`) with secrets (`backend/.env`, SQLite DBs) excluded via `.gitignore`.
-
+### Or Deploy Directly via CLI
 ```powershell
-git remote add origin https://github.com/<your-username>/TrackMyHappiness.git
-git branch -M main
-git push -u origin main
+vercel login
+vercel --prod
 ```
 
 ---
 
-## Step 2 — Deploy the 24/7 Backend + Web App
+## 2. Build & Install Your Permanent Android `.apk` (Free via Expo EAS)
 
-Because `Dockerfile` bundles **both** the Node.js 24 backend and the compiled Expo Web App (`mobile/dist`), deploying this single container gives you:
-- `https://<your-app-url>/` → Full mobile-friendly Web App (installable to iPhone/Android home screen!)
-- `https://<your-app-url>/api/*` → 24/7 AWB watcher, webhooks, and push notification engine
-
-### Option A: Render (1-Click Blueprint via `render.yaml`)
-1. Go to [dashboard.render.com/blueprints](https://dashboard.render.com/blueprints) → **New Blueprint Instance** → select your GitHub repo.
-2. Render automatically reads `render.yaml`, builds `Dockerfile`, and attaches a persistent `/data` disk for SQLite.
-3. Note your live URL (e.g., `https://trackmyhappiness.onrender.com`).
-
-### Option B: Fly.io (via `fly.toml` — Mumbai `bom` region pre-configured)
-```powershell
-fly auth login
-fly apps create trackmyhappiness-app
-fly volumes create tmh_data --region bom --size 1
-fly deploy
-```
-
-### Option C: Google Cloud Run (Docker) or Any VPS
-```powershell
-docker build -t trackmyhappiness:1.0.0 .
-docker run -d -p 4000:4000 -v tmh_data:/data --name trackmyhappiness trackmyhappiness:1.0.0
-```
-*(Note: For serverless hosts with ephemeral local disks like Cloud Run, mount a persistent Cloud Storage FUSE / volume at `/data` or switch to a cloud DB so tracked parcels persist across cold starts.)*
-
----
-
-## Step 3 — Build & Install the Android `.apk` (Free via Expo EAS)
-
-1. Create a free Expo account at [expo.dev](https://expo.dev) (no credit card needed).
-2. Point the Android APK to your deployed 24/7 backend URL by setting `EXPO_PUBLIC_API_URL` in `mobile/eas.json` under `build.preview.env`:
-   ```json
-   "EXPO_PUBLIC_API_URL": "https://trackmyhappiness.onrender.com"
-   ```
-   *(You can also change the backend URL anytime inside the app under **Settings → Backend Server URL**.)*
-3. Run the free cloud build from `mobile/`:
+Once your Vercel URL is live (e.g. `https://track-my-happiness.vercel.app`):
+1. Set `EXPO_PUBLIC_API_URL` in `mobile/eas.json` under `build.preview.env` to your Vercel URL.
+2. Run:
    ```powershell
    cd mobile
    npx eas-cli login
    npx eas-cli build --platform android --profile preview
    ```
-4. When EAS finishes (~5–8 minutes), it gives you a **download link & QR code** for your signed `.apk`. Scan it on your Android phone, install TrackMyHappiness, allow Notifications, and you're live!
+3. Scan the QR code EAS prints to install **TrackMyHappiness** permanently on your Android phone (with real push notifications and your custom icon—no Expo Go needed!).
 
 ---
 
-## Step 4 — Optional \$0 Coverage Expansion (No Subscription)
-
-Out of the box, **Free Live Direct** tracks **Japan Post** (`LP...JP`, `RR...JP`, etc.) and **Cainiao / China cross-border** parcels live with **zero keys**, and gives a 1-tap **Open Live Carrier Page** button on every courier.
-
-To unlock automatic background tracking for **~200 worldwide couriers** (FedEx, UPS, USPS, DHL, Royal Mail, India Post, Blue Dart, etc.) at **\$0**:
-1. Create a free account at [whereparcel.com](https://whereparcel.com) (**1,000 trackings/month free forever, no credit card**).
-2. Open TrackMyHappiness → **Settings** → select **WhereParcel Free Tier** → paste `API_KEY:SECRET_KEY` → tap **Save Tracking Engine**.
+## 3. Optional $0 Global Coverage Expansion
+- Out of the box, **Free Live Direct** tracks **Japan Post** and **Cainiao / China cross-border** parcels live with 0 keys + 1-tap official carrier links on every courier.
+- For ~200 global couriers (FedEx, UPS, USPS, DHL, Royal Mail, India Post, Blue Dart, etc.), get a free **WhereParcel** key at [whereparcel.com](https://whereparcel.com) (**1,000 trackings/month free forever, no credit card**) and paste it into **Settings → WhereParcel**.

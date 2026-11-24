@@ -2,6 +2,7 @@
 node_modules/
 
 # Build outputs
+.vercel/
 backend/dist/
 mobile/.expo/
 mobile/.expo-home/

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AppStore } from '../db/store.js';
+import { IAppStore } from '../db/types.js';
 import { BackgroundScheduler } from '../services/scheduler.js';
 
 const updateSettingsSchema = z.object({
@@ -31,25 +31,33 @@ const updateSettingsSchema = z.object({
     .optional(),
 });
 
-export function createSettingsRouter(store: AppStore, scheduler?: BackgroundScheduler): Router {
+export function createSettingsRouter(store: IAppStore, scheduler?: BackgroundScheduler): Router {
   const router = Router();
 
-  router.get('/', (_req, res) => {
-    res.json({ settings: store.getSettings() });
+  router.get('/', async (_req, res) => {
+    try {
+      res.json({ settings: await store.getSettings() });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load settings' });
+    }
   });
 
-  router.patch('/', (req, res) => {
+  router.patch('/', async (req, res) => {
     const parsed = updateSettingsSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid settings update' });
       return;
     }
 
-    const updated = store.updateSettings(parsed.data);
-    if (parsed.data.pollIntervalMinutes !== undefined) {
-      scheduler?.restart();
+    try {
+      const updated = await store.updateSettings(parsed.data);
+      if (parsed.data.pollIntervalMinutes !== undefined) {
+        scheduler?.restart();
+      }
+      res.json({ settings: updated });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to save settings' });
     }
-    res.json({ settings: updated });
   });
 
   return router;

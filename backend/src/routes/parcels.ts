@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AppStore } from '../db/store.js';
+import { IAppStore } from '../db/types.js';
 import { TrackerService } from '../services/trackerService.js';
 
 const createParcelSchema = z.object({
@@ -36,22 +36,33 @@ const updateParcelSchema = z.object({
   archived: z.boolean().optional(),
 });
 
-export function createParcelsRouter(store: AppStore, tracker: TrackerService): Router {
+export function createParcelsRouter(store: IAppStore, tracker: TrackerService): Router {
   const router = Router();
 
-  router.get('/', (req, res) => {
-    const includeArchived = req.query.includeArchived === 'true';
-    const parcels = store.listParcels({ includeArchived });
-    res.json({ parcels, unreadAlertsCount: store.getUnreadAlertsCount() });
+  router.get('/', async (req, res) => {
+    try {
+      const includeArchived = req.query.includeArchived === 'true';
+      const [parcels, unreadAlertsCount] = await Promise.all([
+        store.listParcels({ includeArchived }),
+        store.getUnreadAlertsCount(),
+      ]);
+      res.json({ parcels, unreadAlertsCount });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to list parcels' });
+    }
   });
 
-  router.get('/:id', (req, res) => {
-    const parcel = store.getParcelById(req.params.id);
-    if (!parcel) {
-      res.status(404).json({ error: 'Parcel not found' });
-      return;
+  router.get('/:id', async (req, res) => {
+    try {
+      const parcel = await store.getParcelById(req.params.id);
+      if (!parcel) {
+        res.status(404).json({ error: 'Parcel not found' });
+        return;
+      }
+      res.json({ parcel });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to load parcel' });
     }
-    res.json({ parcel });
   });
 
   router.post('/', async (req, res) => {
@@ -72,19 +83,23 @@ export function createParcelsRouter(store: AppStore, tracker: TrackerService): R
     }
   });
 
-  router.patch('/:id', (req, res) => {
+  router.patch('/:id', async (req, res) => {
     const parsed = updateParcelSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid update payload' });
       return;
     }
 
-    const updated = store.updateParcel(req.params.id, parsed.data);
-    if (!updated) {
-      res.status(404).json({ error: 'Parcel not found' });
-      return;
+    try {
+      const updated = await store.updateParcel(req.params.id, parsed.data);
+      if (!updated) {
+        res.status(404).json({ error: 'Parcel not found' });
+        return;
+      }
+      res.json({ parcel: updated });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to update parcel' });
     }
-    res.json({ parcel: updated });
   });
 
   router.post('/:id/refresh', async (req, res) => {
@@ -106,18 +121,26 @@ export function createParcelsRouter(store: AppStore, tracker: TrackerService): R
     }
   });
 
-  router.post('/:id/mark-read', (req, res) => {
-    store.markParcelAlertsRead(req.params.id);
-    res.json({ ok: true, unreadAlertsCount: store.getUnreadAlertsCount() });
+  router.post('/:id/mark-read', async (req, res) => {
+    try {
+      await store.markParcelAlertsRead(req.params.id);
+      res.json({ ok: true, unreadAlertsCount: await store.getUnreadAlertsCount() });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to mark read' });
+    }
   });
 
-  router.delete('/:id', (req, res) => {
-    const deleted = store.deleteParcel(req.params.id);
-    if (!deleted) {
-      res.status(404).json({ error: 'Parcel not found' });
-      return;
+  router.delete('/:id', async (req, res) => {
+    try {
+      const deleted = await store.deleteParcel(req.params.id);
+      if (!deleted) {
+        res.status(404).json({ error: 'Parcel not found' });
+        return;
+      }
+      res.json({ deleted: true });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to delete parcel' });
     }
-    res.json({ deleted: true });
   });
 
   return router;

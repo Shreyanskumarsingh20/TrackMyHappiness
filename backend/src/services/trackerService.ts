@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { AppStore } from '../db/store.js';
+import { IAppStore } from '../db/types.js';
 import {
   AlertItem,
   ItemCategory,
@@ -49,36 +49,37 @@ const PROVIDERS: Record<TrackingProviderId, TrackingProvider> = {
 export class TrackerService {
   private notifications: NotificationService;
 
-  constructor(private store: AppStore) {
+  constructor(private store: IAppStore) {
     this.notifications = new NotificationService(store);
   }
 
-  private getKeyForProvider(id: TrackingProviderId): string | undefined {
-    const keys = this.store.getProviderApiKeys();
+  private async getKeyForProvider(id: TrackingProviderId): Promise<string | undefined> {
+    const keys = await this.store.getProviderApiKeys();
     if (id === 'simulator') return undefined;
     if (id === 'free_direct') return keys.dhl || undefined;
     return keys[id] || undefined;
   }
 
-  private resolveActiveProvider(): { provider: TrackingProvider; apiKey?: string } {
-    const settings = this.store.getSettings();
+  private async resolveActiveProvider(): Promise<{ provider: TrackingProvider; apiKey?: string }> {
+    const settings = await this.store.getSettings();
     const chosen = PROVIDERS[settings.activeProvider] ?? freeDirectProvider;
-    const apiKey = this.getKeyForProvider(settings.activeProvider);
+    const apiKey = await this.getKeyForProvider(settings.activeProvider);
 
     if (chosen.isConfigured(apiKey)) {
       return { provider: chosen, apiKey };
     }
-    // Safe zero-cost fallback to Free Live Direct if a keyed provider isn't configured yet
-    return { provider: freeDirectProvider, apiKey: this.getKeyForProvider('free_direct') };
+    return { provider: freeDirectProvider, apiKey: await this.getKeyForProvider('free_direct') };
   }
 
-  private resolveProviderById(id: TrackingProviderId): { provider: TrackingProvider; apiKey?: string } {
+  private async resolveProviderById(
+    id: TrackingProviderId
+  ): Promise<{ provider: TrackingProvider; apiKey?: string }> {
     const chosen = PROVIDERS[id] ?? freeDirectProvider;
-    const apiKey = this.getKeyForProvider(id);
+    const apiKey = await this.getKeyForProvider(id);
     if (chosen.isConfigured(apiKey)) {
       return { provider: chosen, apiKey };
     }
-    return { provider: freeDirectProvider, apiKey: this.getKeyForProvider('free_direct') };
+    return { provider: freeDirectProvider, apiKey: await this.getKeyForProvider('free_direct') };
   }
 
   async createParcel(input: CreateParcelInput): Promise<{ parcel: Parcel; alerts: AlertItem[] }> {
@@ -97,7 +98,7 @@ export class TrackerService {
       carrierName = match?.name ?? input.carrierCode.toUpperCase();
     }
 
-    const settings = this.store.getSettings();
+    const settings = await this.store.getSettings();
     const destCountry = input.destinationCountry?.trim() || settings.defaultDestinationCountry || 'India';
     const destFlag = getCountryFlag(destCountry);
     const originCountry = input.originCountry?.trim() || detected.originCountry || 'International';
@@ -105,9 +106,10 @@ export class TrackerService {
 
     const inferred = inferCategoryAndEmoji(input.itemTitle, input.merchant);
     const itemCategory = input.itemCategory ?? inferred.category;
-    const itemEmoji = input.itemEmoji?.trim() || (input.itemCategory ? CATEGORY_EMOJI[input.itemCategory] : inferred.emoji);
+    const itemEmoji =
+      input.itemEmoji?.trim() || (input.itemCategory ? CATEGORY_EMOJI[input.itemCategory] : inferred.emoji);
 
-    const { provider, apiKey } = this.resolveActiveProvider();
+    const { provider, apiKey } = await this.resolveActiveProvider();
 
     let trackingResult: ProviderTrackingResult;
     try {
@@ -122,18 +124,15 @@ export class TrackerService {
       };
       trackingResult = await provider.registerAndFetch(regInput, apiKey);
 
-      // Bonus: in Free Live Direct mode, if a courier has no keyless endpoint AND user saved a free WhereParcel key,
-      // seamlessly fall back to WhereParcel (1,000 free/mo) automatically!
-      const wpKey = this.getKeyForProvider('whereparcel');
+      const wpKey = await this.getKeyForProvider('whereparcel');
       if (provider.id === 'free_direct' && trackingResult.notice && wpKey) {
         try {
           trackingResult = await whereParcelProvider.registerAndFetch(regInput, wpKey);
         } catch {
-          // Keep the clean Free Live Direct result if WhereParcel fails
+          // Keep Free Live Direct result if WhereParcel fails
         }
       }
     } catch (err) {
-      // If a real API call fails (e.g., network/key quota), still save the parcel cleanly so the user doesn't lose their AWB
       trackingResult = {
         provider: provider.id,
         carrierCode,
@@ -157,7 +156,7 @@ export class TrackerService {
 
     const now = new Date().toISOString();
     const parcelId = crypto.randomUUID();
-    const created = this.store.createParcel({
+    const created = await this.store.createParcel({
       id: parcelId,
       awb: cleanAwb,
       carrierCode: trackingResult.carrierCode || carrierCode,
@@ -189,24 +188,22 @@ export class TrackerService {
     });
 
     const alerts = await this.ingestEvents(created, trackingResult, { onlyAlertLatest: true });
-    return { parcel: this.store.getParcelById(parcelId)!, alerts };
+    return { parcel: (await this.store.getParcelById(parcelId))!, alerts };
   }
 
   async refreshParcel(parcelId: string): Promise<{ parcel: Parcel; newEvents: TrackingEvent[]; alerts: AlertItem[] }> {
-    const parcel = this.store.getParcelById(parcelId);
+    const parcel = await this.store.getParcelById(parcelId);
     if (!parcel) throw new Error('Parcel not found');
 
-    // If the user switched from Simulator to a configured live provider in Settings,
-    // upgrade simulator parcels on refresh so real AWBs immediately pull live data.
-    const activeSettings = this.store.getSettings();
+    const activeSettings = await this.store.getSettings();
     const shouldUpgradeToLive =
       parcel.providerUsed === 'simulator' &&
       activeSettings.activeProvider !== 'simulator' &&
       activeSettings.configuredProviders[activeSettings.activeProvider];
 
     const { provider, apiKey } = shouldUpgradeToLive
-      ? this.resolveActiveProvider()
-      : this.resolveProviderById(parcel.providerUsed);
+      ? await this.resolveActiveProvider()
+      : await this.resolveProviderById(parcel.providerUsed);
 
     const trackingResult = shouldUpgradeToLive
       ? await provider.registerAndFetch(
@@ -224,7 +221,7 @@ export class TrackerService {
       : await provider.fetchUpdates(parcel, apiKey);
 
     if (shouldUpgradeToLive) {
-      this.store.updateParcel(parcel.id, {
+      await this.store.updateParcel(parcel.id, {
         providerUsed: trackingResult.provider,
         providerTrackingId: trackingResult.providerTrackingId ?? null,
         simulatorStage: -1,
@@ -237,14 +234,14 @@ export class TrackerService {
     });
 
     return {
-      parcel: this.store.getParcelById(parcelId)!,
+      parcel: (await this.store.getParcelById(parcelId))!,
       newEvents,
       alerts,
     };
   }
 
   async refreshAllActive(): Promise<{ checked: number; newAlerts: number }> {
-    const active = this.store.listActiveParcelsForPolling();
+    const active = await this.store.listActiveParcelsForPolling();
     let newAlerts = 0;
     for (const parcel of active) {
       try {
@@ -267,7 +264,7 @@ export class TrackerService {
     const parsed = provider.parseWebhook(payload);
     if (!parsed) return { processed: false };
 
-    const parcel = this.store.getParcelByAwb(normalizeAwb(parsed.awb));
+    const parcel = await this.store.getParcelByAwb(normalizeAwb(parsed.awb));
     if (!parcel) return { processed: false, awb: parsed.awb };
 
     const { alerts } = await this.ingestEventsDetailed(
@@ -304,7 +301,7 @@ export class TrackerService {
     const newEvents: TrackingEvent[] = [];
     for (const raw of sortedRaw) {
       const classified = classifyTrackingEvent(raw.description, raw.location, raw.stageHint);
-      const res = this.store.insertEventIfNew({
+      const res = await this.store.insertEventIfNew({
         parcelId: parcel.id,
         occurredAt: raw.occurredAt,
         location: raw.location,
@@ -320,11 +317,11 @@ export class TrackerService {
       }
     }
 
-    const allEvents = this.store.getEventsForParcel(parcel.id);
+    const allEvents = await this.store.getEventsForParcel(parcel.id);
     const latest = allEvents[0];
     const nextEta = result.estimatedDelivery !== undefined ? result.estimatedDelivery : parcel.estimatedDelivery;
 
-    const updatedParcel = this.store.updateParcel(parcel.id, {
+    const updatedParcel = (await this.store.updateParcel(parcel.id, {
       carrierCode: result.carrierCode || parcel.carrierCode,
       carrierName: result.carrierName || parcel.carrierName,
       originCountry: result.originCountry || parcel.originCountry,
@@ -340,7 +337,7 @@ export class TrackerService {
       lastEventAt: latest ? latest.occurredAt : parcel.lastEventAt,
       simulatorStage: result.simulatorStage !== undefined ? result.simulatorStage : parcel.simulatorStage,
       simulatorRoute: result.simulatorRoute !== undefined ? result.simulatorRoute : parcel.simulatorRoute,
-    })!;
+    }))!;
 
     const eventsToNotify =
       options.onlyAlertLatest && newEvents.length > 0 ? [newEvents[newEvents.length - 1]] : newEvents;
@@ -356,14 +353,11 @@ export class TrackerService {
     return { newEvents, alerts };
   }
 
-  /**
-   * Seeds 3 realistic global parcels on first launch so the user immediately sees
-   * "What's Coming", Customs alerts, Out-for-Delivery updates, and the Simulator in action.
-   */
   async seedWelcomeParcelsIfEmpty(): Promise<void> {
-    if (this.store.countParcels() > 0) return;
+    if ((await this.store.countParcels()) > 0) return;
 
-    const destCountry = this.store.getSettings().defaultDestinationCountry || 'India';
+    const settings = await this.store.getSettings();
+    const destCountry = settings.defaultDestinationCountry || 'India';
     const destFlag = getCountryFlag(destCountry);
 
     const samples: Array<{
@@ -390,7 +384,7 @@ export class TrackerService {
         itemNotes: 'Midnight Blue — includes hard travel case',
         originCountry: 'Japan',
         originFlag: '🇯🇵',
-        targetStage: 8, // Out for delivery!
+        targetStage: 8,
       },
       {
         awb: 'EJ492817365CN',
@@ -403,7 +397,7 @@ export class TrackerService {
         itemNotes: 'Custom PBT keycap set + tactile switches for desk setup',
         originCountry: 'China',
         originFlag: '🇨🇳',
-        targetStage: 5, // Customs clearance / attention!
+        targetStage: 5,
       },
       {
         awb: '1Z999AA10123456784',
@@ -416,7 +410,7 @@ export class TrackerService {
         itemNotes: 'Gift box included — birthday surprise',
         originCountry: 'United States',
         originFlag: '🇺🇸',
-        targetStage: 2, // Departed origin country — in international transit!
+        targetStage: 2,
       },
     ];
 
@@ -446,7 +440,7 @@ export class TrackerService {
       const now = new Date().toISOString();
       const id = crypto.randomUUID();
 
-      const parcel = this.store.createParcel({
+      const parcel = await this.store.createParcel({
         id,
         awb: s.awb,
         carrierCode: s.carrierCode,

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { envConfig } from '../config.js';
 import { buildCarrierTrackingUrl } from '../services/carrierTrackingUrls.js';
 import {
@@ -17,6 +17,7 @@ import {
   TrackingEvent,
   TrackingProviderId,
 } from '../types.js';
+import { CreateParcelRecord, IAppStore, UpdateParcelPatch } from './types.js';
 
 interface SqliteStatement {
   run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint };
@@ -31,9 +32,6 @@ interface SqliteDatabase {
 }
 
 const require = createRequire(import.meta.url);
-const { DatabaseSync } = require('node:sqlite') as {
-  DatabaseSync: new (location: string) => SqliteDatabase;
-};
 
 export const DEFAULT_NOTIFICATION_RULES: NotificationRules = {
   notifyOnShipped: true,
@@ -45,10 +43,17 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRules = {
   muteMinorHubScans: true,
 };
 
-export class AppStore {
+export class AppStore implements IAppStore {
+  readonly storageKind: 'sqlite-local' | 'sqlite-ephemeral';
   private db: SqliteDatabase;
 
   constructor(dbPath: string = envConfig.dbPath) {
+    const { DatabaseSync } = require('node:sqlite') as {
+      DatabaseSync: new (location: string) => SqliteDatabase;
+    };
+    this.storageKind =
+      dbPath === ':memory:' || dbPath.startsWith('/tmp') ? 'sqlite-ephemeral' : 'sqlite-local';
+
     if (dbPath !== ':memory:') {
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     }
@@ -61,7 +66,11 @@ export class AppStore {
     this.initSchema();
   }
 
-  close(): void {
+  async init(): Promise<void> {
+    // Schema already initialized synchronously in constructor
+  }
+
+  async close(): Promise<void> {
     this.db.close();
   }
 
@@ -88,7 +97,7 @@ export class AppStore {
         estimated_delivery TEXT,
         last_location TEXT NOT NULL DEFAULT '',
         last_event_at TEXT,
-        provider_used TEXT NOT NULL DEFAULT 'simulator',
+        provider_used TEXT NOT NULL DEFAULT 'free_direct',
         provider_tracking_id TEXT,
         simulator_stage INTEGER NOT NULL DEFAULT -1,
         simulator_route_json TEXT,
@@ -210,33 +219,50 @@ export class AppStore {
     };
   }
 
-  countParcels(): number {
+  private mapAlertRow(row: Record<string, unknown>): AlertItem {
+    return {
+      id: String(row.id),
+      parcelId: String(row.parcel_id),
+      parcelTitle: String(row.parcel_title ?? 'Parcel'),
+      parcelEmoji: String(row.parcel_emoji ?? '📦'),
+      parcelAwb: String(row.parcel_awb ?? ''),
+      carrierName: String(row.carrier_name ?? ''),
+      eventId: row.event_id ? String(row.event_id) : null,
+      importance: String(row.importance) as EventImportance,
+      stage: String(row.stage) as ParcelStage,
+      title: String(row.title),
+      body: String(row.body),
+      isRead: Boolean(row.is_read),
+      pushSent: Boolean(row.push_sent),
+      createdAt: String(row.created_at),
+    };
+  }
+
+  async countParcels(): Promise<number> {
     const row = this.db.prepare('SELECT COUNT(*) as c FROM parcels').get();
     return Number(row?.c ?? 0);
   }
 
-  listParcels(options?: { includeArchived?: boolean }): Parcel[] {
+  async listParcels(options?: { includeArchived?: boolean }): Promise<Parcel[]> {
     const includeArchived = options?.includeArchived ?? false;
     const rows = includeArchived
-      ? this.db
-          .prepare('SELECT * FROM parcels ORDER BY updated_at DESC')
-          .all()
-      : this.db
-          .prepare('SELECT * FROM parcels WHERE archived = 0 ORDER BY updated_at DESC')
-          .all();
+      ? this.db.prepare('SELECT * FROM parcels ORDER BY updated_at DESC').all()
+      : this.db.prepare('SELECT * FROM parcels WHERE archived = 0 ORDER BY updated_at DESC').all();
 
-    return rows.map((r) => {
+    const result: Parcel[] = [];
+    for (const r of rows) {
       const parcel = this.mapParcelRow(r);
       const unreadRow = this.db
         .prepare('SELECT COUNT(*) as c FROM alerts WHERE parcel_id = ? AND is_read = 0')
         .get(parcel.id);
       parcel.unreadAlertsCount = Number(unreadRow?.c ?? 0);
-      parcel.events = this.getEventsForParcel(parcel.id, 3);
-      return parcel;
-    });
+      parcel.events = await this.getEventsForParcel(parcel.id, 3);
+      result.push(parcel);
+    }
+    return result;
   }
 
-  listActiveParcelsForPolling(): Parcel[] {
+  async listActiveParcelsForPolling(): Promise<Parcel[]> {
     const rows = this.db
       .prepare(
         `SELECT * FROM parcels
@@ -249,11 +275,11 @@ export class AppStore {
     return rows.map((r) => this.mapParcelRow(r));
   }
 
-  getParcelById(id: string): Parcel | null {
+  async getParcelById(id: string): Promise<Parcel | null> {
     const row = this.db.prepare('SELECT * FROM parcels WHERE id = ?').get(id);
     if (!row) return null;
     const parcel = this.mapParcelRow(row);
-    parcel.events = this.getEventsForParcel(id);
+    parcel.events = await this.getEventsForParcel(id);
     const unreadRow = this.db
       .prepare('SELECT COUNT(*) as c FROM alerts WHERE parcel_id = ? AND is_read = 0')
       .get(id);
@@ -261,14 +287,14 @@ export class AppStore {
     return parcel;
   }
 
-  getParcelByAwb(awb: string): Parcel | null {
+  async getParcelByAwb(awb: string): Promise<Parcel | null> {
     const row = this.db
       .prepare('SELECT * FROM parcels WHERE UPPER(awb) = UPPER(?) AND archived = 0 LIMIT 1')
       .get(awb);
     return row ? this.mapParcelRow(row) : null;
   }
 
-  createParcel(parcel: Omit<Parcel, 'events' | 'unreadAlertsCount' | 'carrierTrackingUrl'>): Parcel {
+  async createParcel(parcel: CreateParcelRecord): Promise<Parcel> {
     this.db
       .prepare(
         `INSERT INTO parcels (
@@ -310,39 +336,11 @@ export class AppStore {
         parcel.createdAt,
         parcel.updatedAt
       );
-    return this.getParcelById(parcel.id)!;
+    return (await this.getParcelById(parcel.id))!;
   }
 
-  updateParcel(
-    id: string,
-    patch: Partial<{
-      carrierCode: string;
-      carrierName: string;
-      itemTitle: string;
-      itemCategory: ItemCategory;
-      itemEmoji: string;
-      merchant: string;
-      itemNotes: string;
-      itemImageUrl: string;
-      orderUrl: string;
-      originCountry: string;
-      originFlag: string;
-      destinationCountry: string;
-      destinationFlag: string;
-      status: ParcelStage;
-      statusSummary: string;
-      estimatedDelivery: string | null;
-      lastLocation: string;
-      lastEventAt: string | null;
-      providerUsed: TrackingProviderId;
-      providerTrackingId: string | null;
-      simulatorStage: number;
-      simulatorRoute: SimulatedCheckpoint[] | null;
-      muted: boolean;
-      archived: boolean;
-    }>
-  ): Parcel | null {
-    const existing = this.getParcelById(id);
+  async updateParcel(id: string, patch: UpdateParcelPatch): Promise<Parcel | null> {
+    const existing = await this.getParcelById(id);
     if (!existing) return null;
 
     const now = new Date().toISOString();
@@ -393,7 +391,6 @@ export class AppStore {
         id
       );
 
-    // Keep existing alert titles synced if the user renamed "What's Coming"
     if (patch.itemTitle && patch.itemTitle !== existing.itemTitle) {
       const existingAlerts = this.db
         .prepare('SELECT id, title, body FROM alerts WHERE parcel_id = ?')
@@ -412,12 +409,12 @@ export class AppStore {
     return this.getParcelById(id);
   }
 
-  deleteParcel(id: string): boolean {
+  async deleteParcel(id: string): Promise<boolean> {
     const res = this.db.prepare('DELETE FROM parcels WHERE id = ?').run(id);
     return res.changes > 0;
   }
 
-  getEventsForParcel(parcelId: string, limit?: number): TrackingEvent[] {
+  async getEventsForParcel(parcelId: string, limit?: number): Promise<TrackingEvent[]> {
     const sql = limit
       ? 'SELECT * FROM tracking_events WHERE parcel_id = ? ORDER BY occurred_at DESC, rowid DESC LIMIT ?'
       : 'SELECT * FROM tracking_events WHERE parcel_id = ? ORDER BY occurred_at DESC, rowid DESC';
@@ -425,10 +422,10 @@ export class AppStore {
     return rows.map((r) => this.mapEventRow(r));
   }
 
-  insertEventIfNew(event: Omit<TrackingEvent, 'id' | 'eventHash' | 'createdAt'>): {
+  async insertEventIfNew(event: Omit<TrackingEvent, 'id' | 'eventHash' | 'createdAt'>): Promise<{
     inserted: boolean;
     event: TrackingEvent | null;
-  } {
+  }> {
     const dayBucket = event.occurredAt.slice(0, 10);
     const hashInput = `${event.parcelId}|${dayBucket}|${event.rawDescription.toLowerCase().trim()}|${event.location
       .toLowerCase()
@@ -440,7 +437,6 @@ export class AppStore {
       .get(event.parcelId, eventHash);
 
     if (existing) {
-      // Keep the latest timestamp if the carrier repeated the exact same scan minutes later
       if (new Date(event.occurredAt).getTime() > new Date(String(existing.occurred_at)).getTime()) {
         this.db
           .prepare('UPDATE tracking_events SET occurred_at = ? WHERE id = ?')
@@ -476,16 +472,11 @@ export class AppStore {
 
     return {
       inserted: true,
-      event: {
-        id,
-        eventHash,
-        createdAt,
-        ...event,
-      },
+      event: { id, eventHash, createdAt, ...event },
     };
   }
 
-  createAlert(input: {
+  async createAlert(input: {
     parcelId: string;
     eventId: string | null;
     importance: EventImportance;
@@ -493,7 +484,7 @@ export class AppStore {
     title: string;
     body: string;
     pushSent: boolean;
-  }): AlertItem {
+  }): Promise<AlertItem> {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     this.db
@@ -513,10 +504,10 @@ export class AppStore {
         createdAt
       );
 
-    return this.getAlertById(id)!;
+    return (await this.getAlertById(id))!;
   }
 
-  getAlertById(id: string): AlertItem | null {
+  async getAlertById(id: string): Promise<AlertItem | null> {
     const row = this.db
       .prepare(
         `SELECT a.*, p.item_title as parcel_title, p.item_emoji as parcel_emoji, p.awb as parcel_awb, p.carrier_name
@@ -528,26 +519,7 @@ export class AppStore {
     return row ? this.mapAlertRow(row) : null;
   }
 
-  private mapAlertRow(row: Record<string, unknown>): AlertItem {
-    return {
-      id: String(row.id),
-      parcelId: String(row.parcel_id),
-      parcelTitle: String(row.parcel_title ?? 'Parcel'),
-      parcelEmoji: String(row.parcel_emoji ?? '📦'),
-      parcelAwb: String(row.parcel_awb ?? ''),
-      carrierName: String(row.carrier_name ?? ''),
-      eventId: row.event_id ? String(row.event_id) : null,
-      importance: String(row.importance) as EventImportance,
-      stage: String(row.stage) as ParcelStage,
-      title: String(row.title),
-      body: String(row.body),
-      isRead: Boolean(row.is_read),
-      pushSent: Boolean(row.push_sent),
-      createdAt: String(row.created_at),
-    };
-  }
-
-  listAlerts(options?: { importantOnly?: boolean; limit?: number }): AlertItem[] {
+  async listAlerts(options?: { importantOnly?: boolean; limit?: number }): Promise<AlertItem[]> {
     const limit = options?.limit ?? 80;
     const sql = options?.importantOnly
       ? `SELECT a.*, p.item_title as parcel_title, p.item_emoji as parcel_emoji, p.awb as parcel_awb, p.carrier_name
@@ -563,24 +535,24 @@ export class AppStore {
     return rows.map((r) => this.mapAlertRow(r));
   }
 
-  getUnreadAlertsCount(): number {
+  async getUnreadAlertsCount(): Promise<number> {
     const row = this.db.prepare('SELECT COUNT(*) as c FROM alerts WHERE is_read = 0').get();
     return Number(row?.c ?? 0);
   }
 
-  markAlertRead(id: string): void {
+  async markAlertRead(id: string): Promise<void> {
     this.db.prepare('UPDATE alerts SET is_read = 1 WHERE id = ?').run(id);
   }
 
-  markAllAlertsRead(): void {
+  async markAllAlertsRead(): Promise<void> {
     this.db.prepare('UPDATE alerts SET is_read = 1 WHERE is_read = 0').run();
   }
 
-  markParcelAlertsRead(parcelId: string): void {
+  async markParcelAlertsRead(parcelId: string): Promise<void> {
     this.db.prepare('UPDATE alerts SET is_read = 1 WHERE parcel_id = ? AND is_read = 0').run(parcelId);
   }
 
-  savePushToken(token: string, platform = 'unknown', deviceName = ''): void {
+  async savePushToken(token: string, platform = 'unknown', deviceName = ''): Promise<void> {
     const now = new Date().toISOString();
     this.db
       .prepare(
@@ -591,7 +563,7 @@ export class AppStore {
       .run(token, platform, deviceName, now);
   }
 
-  listPushTokens(): string[] {
+  async listPushTokens(): Promise<string[]> {
     const rows = this.db.prepare('SELECT token FROM push_tokens').all();
     return rows.map((r) => String(r.token));
   }
@@ -615,7 +587,7 @@ export class AppStore {
       .run(key, JSON.stringify(value));
   }
 
-  getProviderApiKeys(): ProviderApiKeys {
+  async getProviderApiKeys(): Promise<ProviderApiKeys> {
     const saved = this.getSettingValue<ProviderApiKeys>('provider_api_keys', {});
     return {
       whereparcel: saved.whereparcel || envConfig.apiKeys.whereparcel || '',
@@ -626,8 +598,8 @@ export class AppStore {
     };
   }
 
-  getSettings(): AppSettings {
-    const keys = this.getProviderApiKeys();
+  async getSettings(): Promise<AppSettings> {
+    const keys = await this.getProviderApiKeys();
     const activeProvider = this.getSettingValue<TrackingProviderId>(
       'active_provider',
       envConfig.defaultProvider
@@ -662,13 +634,13 @@ export class AppStore {
     };
   }
 
-  updateSettings(patch: {
+  async updateSettings(patch: {
     activeProvider?: TrackingProviderId;
     pollIntervalMinutes?: number;
     defaultDestinationCountry?: string;
     notificationRules?: Partial<NotificationRules>;
     apiKeys?: Partial<ProviderApiKeys>;
-  }): AppSettings {
+  }): Promise<AppSettings> {
     if (patch.activeProvider) {
       this.setSettingValue('active_provider', patch.activeProvider);
     }
@@ -679,7 +651,7 @@ export class AppStore {
       this.setSettingValue('default_destination_country', patch.defaultDestinationCountry.trim());
     }
     if (patch.notificationRules) {
-      const current = this.getSettings().notificationRules;
+      const current = (await this.getSettings()).notificationRules;
       this.setSettingValue('notification_rules', { ...current, ...patch.notificationRules });
     }
     if (patch.apiKeys) {

@@ -3,6 +3,16 @@
   "version": "1.0.0",
   "private": true,
   "description": "TrackMyHappiness — Global parcel tracker mobile app & background AWB notification engine",
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "zod": "^3.24.2"
+  },
   "scripts": {
     "dev:backend": "npm --prefix backend run dev",
     "dev:mobile": "npm --prefix mobile run start",
@@ -10,6 +20,7 @@
     "build:backend": "npm --prefix backend run build",
     "build:web": "npm --prefix mobile run export:web",
     "build:all": "npm run build:backend && npm run build:web",
+    "vercel:build": "npm --prefix backend install && npm --prefix backend run build && npm --prefix mobile install --legacy-peer-deps && EXPO_NO_TELEMETRY=1 npm --prefix mobile run export:web",
     "start:prod": "npm --prefix backend run start:prod",
     "build:android-apk": "npm --prefix mobile exec -- eas build --platform android --profile preview",
     "test:backend": "npm --prefix backend test",

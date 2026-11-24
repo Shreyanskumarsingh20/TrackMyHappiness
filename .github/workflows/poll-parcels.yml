@@ -1,0 +1,19 @@
+name: Poll Active Parcels (Every 30 Minutes)
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    if: ${{ vars.APP_URL != '' }}
+    steps:
+      - name: Trigger TrackMyHappiness background parcel check
+        run: |
+          if [ -n "${{ secrets.CRON_SECRET }}" ]; then
+            curl -fsSL -X POST "${{ vars.APP_URL }}/api/cron/poll" -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          else
+            curl -fsSL -X POST "${{ vars.APP_URL }}/api/cron/poll"
+          fi

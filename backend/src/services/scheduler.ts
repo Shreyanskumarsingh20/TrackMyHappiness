@@ -1,15 +1,16 @@
-import { AppStore } from '../db/store.js';
+import { IAppStore } from '../db/types.js';
 import { TrackerService } from './trackerService.js';
 
 export class BackgroundScheduler {
   private timer: NodeJS.Timeout | null = null;
   private isRunning = false;
 
-  constructor(private store: AppStore, private tracker: TrackerService) {}
+  constructor(private store: IAppStore, private tracker: TrackerService) {}
 
-  start(): void {
+  async start(): Promise<void> {
     this.stop();
-    const intervalMin = Math.max(5, this.store.getSettings().pollIntervalMinutes);
+    const settings = await this.store.getSettings();
+    const intervalMin = Math.max(5, settings.pollIntervalMinutes);
     const intervalMs = intervalMin * 60_000;
 
     this.timer = setInterval(async () => {
@@ -29,12 +30,11 @@ export class BackgroundScheduler {
       }
     }, intervalMs);
 
-    // Don't block graceful shutdown
     this.timer.unref();
   }
 
   restart(): void {
-    this.start();
+    void this.start();
   }
 
   stop(): void {
