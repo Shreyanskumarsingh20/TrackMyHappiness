@@ -4,7 +4,7 @@
   "private": true,
   "description": "TrackMyHappiness — Global parcel tracker mobile app & background AWB notification engine",
   "engines": {
-    "node": "24.x"
+    "node": ">=22.0.0"
   },
   "dependencies": {
     "cors": "^2.8.5",
