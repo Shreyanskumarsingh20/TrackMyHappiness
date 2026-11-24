@@ -42,12 +42,6 @@ const FREE_PROVIDERS: ProviderOption[] = [
     keyPlaceholder: 'your_api_key:your_secret_key',
     signupUrl: 'https://whereparcel.com',
   },
-  {
-    id: 'simulator',
-    name: 'Global Simulator (Demo Mode)',
-    badge: 'DEMO',
-    desc: 'Simulate full worldwide journeys, customs holds, and delivery alerts without touching live carriers.',
-  },
 ];
 
 const OPTIONAL_PAID_PROVIDERS: ProviderOption[] = [
@@ -74,6 +68,12 @@ const OPTIONAL_PAID_PROVIDERS: ProviderOption[] = [
     desc: 'Global & regional courier tracking API.',
     keyLabel: 'TrackingMore API Key',
     keyPlaceholder: 'Paste TrackingMore key',
+  },
+  {
+    id: 'simulator',
+    name: 'Offline Simulator (Testing Only)',
+    badge: 'TEST',
+    desc: 'Generate simulated milestones for local UI testing.',
   },
 ];
 
@@ -317,8 +317,8 @@ export default function SettingsScreen() {
             />
             <Text style={styles.collapseBtnText}>
               {showPaidProviders
-                ? 'Hide optional paid aggregators'
-                : 'Optional business aggregators (17TRACK / Ship24 / TrackingMore)'}
+                ? 'Hide advanced / paid aggregators'
+                : 'Advanced / Paid APIs (17TRACK / Ship24 / TrackingMore) & Test Mode'}
             </Text>
           </Pressable>
 

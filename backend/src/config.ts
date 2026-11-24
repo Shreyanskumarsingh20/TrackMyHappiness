@@ -27,10 +27,7 @@ export const envConfig = {
   dbPath: process.env.DB_PATH
     ? path.resolve(process.env.DB_PATH)
     : path.resolve(process.cwd(), 'data', 'trackmyhappiness.db'),
-  seedDemoParcels:
-    process.env.SEED_DEMO_PARCELS !== undefined
-      ? process.env.SEED_DEMO_PARCELS === 'true'
-      : process.env.NODE_ENV !== 'production',
+  seedDemoParcels: process.env.SEED_DEMO_PARCELS === 'true',
   webDistDir: process.env.WEB_DIST_DIR
     ? path.resolve(process.env.WEB_DIST_DIR)
     : path.resolve(process.cwd(), '..', 'mobile', 'dist'),

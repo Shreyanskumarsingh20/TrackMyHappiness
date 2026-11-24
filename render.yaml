@@ -1,22 +1,20 @@
-# One-click Render Blueprint for TrackMyHappiness (24/7 Backend + Web App)
+# One-click $0 Free Render Blueprint for TrackMyHappiness (Backend + Web App)
 # Connect your GitHub repo at https://dashboard.render.com/blueprints
+# Uses Render's FREE plan ($0/month, no credit card required).
 services:
   - type: web
     name: trackmyhappiness
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
-    disk:
-      name: trackmyhappiness-data
-      mountPath: /data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "4000"
       - key: DB_PATH
-        value: /data/trackmyhappiness.db
+        value: /tmp/trackmyhappiness.db
       - key: TRACKING_PROVIDER
         value: free_direct
       - key: POLL_INTERVAL_MINUTES

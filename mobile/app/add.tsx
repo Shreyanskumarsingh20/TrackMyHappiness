@@ -18,21 +18,6 @@ import { api } from '../src/services/api';
 import { CATEGORIES, COLORS, SHADOW_CARD } from '../src/theme/tokens';
 import { CarrierDetectionResult, CarrierOption, ItemCategory } from '../src/types';
 
-const SAMPLE_MESSAGES = [
-  {
-    label: '🇯🇵 Amazon Japan + DHL',
-    text: 'Hi! Your Nintendo Switch Pro Controller from Amazon has shipped via DHL Express. Tracking AWB: 4928104736. Arriving Dec 2.',
-  },
-  {
-    label: '🇨🇳 AliExpress + China Post',
-    text: 'Order #8823192201 dispatched! Item: Espresso Tamper & Coffee Scale from AliExpress. AWB: RR829104652CN',
-  },
-  {
-    label: '🇺🇸 Nike US + UPS',
-    text: 'Great news! Your Running Shoes from Nike US is on the way via UPS. Tracking number: 1Z999AA10876543210.',
-  },
-];
-
 export default function AddParcelScreen() {
   const router = useRouter();
   const { createParcel, showToast } = useParcels();
@@ -257,27 +242,6 @@ export default function AddParcelScreen() {
               <Text style={styles.parsedPillText}>{parsedBadge}</Text>
             </View>
           ) : null}
-
-          {/* Quick Demo Sample Chips */}
-          <Text style={styles.tryLabel}>Or test Smart Paste with a sample message:</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.samplesRow}
-          >
-            {SAMPLE_MESSAGES.map((s) => (
-              <Pressable
-                key={s.label}
-                onPress={() => {
-                  setSmartText(s.text);
-                  runSmartPaste(s.text);
-                }}
-                style={styles.sampleChip}
-              >
-                <Text style={styles.sampleChipText}>{s.label}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
         </View>
 
         {/* Core AWB + What's Coming Form */}
@@ -597,30 +561,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: COLORS.success,
-  },
-  tryLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-    marginTop: 12,
-    marginBottom: 6,
-  },
-  samplesRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sampleChip: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  sampleChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.text,
   },
   formCard: {
     backgroundColor: COLORS.surface,
