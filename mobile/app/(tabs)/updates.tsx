@@ -9,7 +9,7 @@ import { formatRelativeTime } from '../../src/utils/date';
 
 export default function UpdatesScreen() {
   const router = useRouter();
-  const { alerts, unreadCount, refreshing, refreshData, markAlertRead, markAllAlertsRead } =
+  const { alerts, unreadCount, refreshing, refreshData, markAlertRead, markAllAlertsRead, showToast } =
     useParcels();
   const [importantOnly, setImportantOnly] = useState(true);
 
@@ -17,6 +17,17 @@ export default function UpdatesScreen() {
     if (!importantOnly) return alerts;
     return alerts.filter((a) => a.importance === 'critical' || a.importance === 'important');
   }, [alerts, importantOnly]);
+
+  const hasAnyUnread = unreadCount > 0 || alerts.some((a) => !a.isRead);
+
+  async function handleMarkAllRead() {
+    try {
+      await markAllAlertsRead();
+      showToast({ title: 'All updates marked read', body: 'Your inbox is clear.', tone: 'info' });
+    } catch (err: any) {
+      showToast({ title: 'Could not mark read', body: err?.message || 'Try again.', tone: 'danger' });
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -39,8 +50,8 @@ export default function UpdatesScreen() {
               Always tells you what's moving — no cryptic AWB guesswork.
             </Text>
           </View>
-          {unreadCount > 0 ? (
-            <Pressable onPress={markAllAlertsRead} style={styles.readAllBtn}>
+          {hasAnyUnread ? (
+            <Pressable onPress={handleMarkAllRead} style={styles.readAllBtn}>
               <Ionicons name="checkmark-done" size={15} color={COLORS.primary} />
               <Text style={styles.readAllText}>Mark read</Text>
             </Pressable>
@@ -83,7 +94,7 @@ export default function UpdatesScreen() {
               <Pressable
                 key={alert.id}
                 onPress={() => {
-                  if (!alert.isRead) markAlertRead(alert.id);
+                  if (!alert.isRead) markAlertRead(alert.id).catch(() => {});
                   router.push(`/parcel/${alert.parcelId}`);
                 }}
                 style={({ pressed }) => [

@@ -116,6 +116,7 @@ export const api = {
     request<{
       ok: boolean;
       service: string;
+      storage?: string;
       activeProvider: TrackingProviderId;
       parcelsCount: number;
       unreadAlertsCount: number;

@@ -20,7 +20,8 @@ type FilterTab = 'all' | 'incoming' | 'attention' | 'delivered';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { parcels, settings, loading, refreshing, connectionError, refreshData } = useParcels();
+  const { parcels, settings, loading, refreshing, connectionError, storageKind, refreshData } =
+    useParcels();
   const [filter, setFilter] = useState<FilterTab>('all');
   const [search, setSearch] = useState('');
 
@@ -129,6 +130,19 @@ export default function HomeScreen() {
               </Pressable>
             </View>
           </View>
+        ) : null}
+
+        {/* Ephemeral cloud storage notice (shown on Vercel until free Neon Postgres is connected) */}
+        {!connectionError && storageKind === 'sqlite-ephemeral' ? (
+          <Pressable
+            onPress={() => router.push('/(tabs)/settings')}
+            style={styles.ephemeralBanner}
+          >
+            <Ionicons name="server-outline" size={18} color={COLORS.warning} />
+            <Text style={styles.ephemeralText}>
+              Temporary cloud storage active — attach free Neon Postgres in Vercel Storage so parcels sync permanently across requests.
+            </Text>
+          </Pressable>
         ) : null}
 
         {/* Summary KPI Strip */}
@@ -399,6 +413,24 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 12,
     fontWeight: '600',
+  },
+  ephemeralBanner: {
+    marginTop: 12,
+    backgroundColor: COLORS.warningBg,
+    borderRadius: 14,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#F59E0B55',
+  },
+  ephemeralText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.warning,
+    lineHeight: 17,
   },
   statsRow: {
     flexDirection: 'row',

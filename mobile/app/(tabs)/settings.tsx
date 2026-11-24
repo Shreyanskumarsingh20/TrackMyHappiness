@@ -397,7 +397,15 @@ export default function SettingsScreen() {
               return (
                 <Pressable
                   key={country}
-                  onPress={() => updateSettings({ defaultDestinationCountry: country })}
+                  onPress={() =>
+                    updateSettings({ defaultDestinationCountry: country }).catch((err: any) =>
+                      showToast({
+                        title: 'Could not update country',
+                        body: err?.message || 'Try again.',
+                        tone: 'danger',
+                      })
+                    )
+                  }
                   style={[styles.destChip, active && styles.destChipActive]}
                 >
                   <Text style={[styles.destText, active && styles.destTextActive]}>{country}</Text>

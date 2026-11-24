@@ -105,6 +105,12 @@ export default function ParcelDetailScreen() {
         body: `${updated.itemEmoji} ${updated.itemTitle}`,
         tone: 'success',
       });
+    } catch (err: any) {
+      showToast({
+        title: 'Could not save changes',
+        body: err?.message || 'Try refreshing and saving again.',
+        tone: 'danger',
+      });
     } finally {
       setSavingEdit(false);
     }
@@ -129,35 +135,55 @@ export default function ParcelDetailScreen() {
 
   async function handleCopyAwb() {
     if (!parcel) return;
-    await Clipboard.setStringAsync(parcel.awb);
-    showToast({
-      title: 'AWB copied',
-      body: parcel.awb,
-      tone: 'info',
-    });
+    try {
+      await Clipboard.setStringAsync(parcel.awb);
+      showToast({
+        title: 'AWB copied',
+        body: parcel.awb,
+        tone: 'info',
+      });
+    } catch {
+      showToast({ title: 'Copy failed', body: parcel.awb, tone: 'warning' });
+    }
   }
 
   async function handleToggleMute() {
     if (!parcel) return;
-    const updated = await updateParcel(parcel.id, { muted: !parcel.muted });
-    setParcel(updated);
-    showToast({
-      title: updated.muted ? 'Alerts muted for this parcel' : 'Important alerts active',
-      body: updated.itemTitle,
-      tone: 'info',
-    });
+    try {
+      const updated = await updateParcel(parcel.id, { muted: !parcel.muted });
+      setParcel(updated);
+      showToast({
+        title: updated.muted ? 'Alerts muted for this parcel' : 'Important alerts active',
+        body: updated.itemTitle,
+        tone: 'info',
+      });
+    } catch (err: any) {
+      showToast({
+        title: 'Could not update alert setting',
+        body: err?.message || 'Try again in a moment.',
+        tone: 'danger',
+      });
+    }
   }
 
   function handleDelete() {
     if (!parcel) return;
     const performDelete = async () => {
-      await deleteParcel(parcel.id);
-      router.replace('/(tabs)');
+      try {
+        await deleteParcel(parcel.id);
+        router.replace('/(tabs)');
+      } catch (err: any) {
+        showToast({
+          title: 'Could not remove parcel',
+          body: err?.message || 'Try again in a moment.',
+          tone: 'danger',
+        });
+      }
     };
 
     if (Platform.OS === 'web') {
       if (typeof window !== 'undefined' && window.confirm(`Stop tracking "${parcel.itemTitle}"?`)) {
-        performDelete();
+        void performDelete();
       }
       return;
     }
@@ -167,7 +193,7 @@ export default function ParcelDetailScreen() {
       `Stop tracking "${parcel.itemTitle}" (${parcel.awb})?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: performDelete },
+        { text: 'Delete', style: 'destructive', onPress: () => void performDelete() },
       ]
     );
   }
@@ -184,8 +210,11 @@ export default function ParcelDetailScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.notFoundTitle}>Parcel not found</Text>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>Go Back</Text>
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+          style={styles.backBtn}
+        >
+          <Text style={styles.backBtnText}>Go to What's Coming</Text>
         </Pressable>
       </View>
     );

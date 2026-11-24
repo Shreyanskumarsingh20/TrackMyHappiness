@@ -22,6 +22,7 @@ interface ParcelsContextValue {
   loading: boolean;
   refreshing: boolean;
   connectionError: string | null;
+  storageKind: string | null;
   toast: ToastNotice | null;
   dismissToast: () => void;
   showToast: (notice: Omit<ToastNotice, 'id'>) => void;
@@ -82,6 +83,7 @@ export function ParcelsProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [storageKind, setStorageKind] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastNotice | null>(null);
 
   const showToast = useCallback((notice: Omit<ToastNotice, 'id'>) => {
@@ -97,15 +99,17 @@ export function ParcelsProvider({ children }: { children: React.ReactNode }) {
   const refreshData = useCallback(async (silent = false) => {
     if (!silent) setRefreshing(true);
     try {
-      const [parcelsRes, alertsRes, settingsRes] = await Promise.all([
+      const [parcelsRes, alertsRes, settingsRes, healthRes] = await Promise.all([
         api.listParcels(false),
         api.listAlerts(false),
         api.getSettings(),
+        api.health().catch(() => null),
       ]);
       setParcels(parcelsRes.parcels);
       setAlerts(alertsRes.alerts);
       setUnreadCount(alertsRes.unreadCount);
       setSettings(settingsRes.settings);
+      if (healthRes?.storage) setStorageKind(healthRes.storage);
       setConnectionError(null);
     } catch (err: any) {
       setConnectionError(err?.message || 'Unable to connect to tracking server');
@@ -138,7 +142,13 @@ export function ParcelsProvider({ children }: { children: React.ReactNode }) {
   const createParcel = useCallback(
     async (payload: Parameters<ParcelsContextValue['createParcel']>[0]) => {
       const res = await api.createParcel(payload);
-      await refreshData(true);
+      // Immediately populate local state so /parcel/[id] renders with zero blank frame
+      setParcels((prev) => [res.parcel, ...prev.filter((p) => p.id !== res.parcel.id)]);
+      if (res.alerts.length > 0) {
+        setAlerts((prev) => [...res.alerts, ...prev]);
+        setUnreadCount((prev) => prev + res.alerts.length);
+      }
+      refreshData(true).catch(() => {});
       if (res.alerts[0]) {
         showToast({
           title: res.alerts[0].title,
@@ -281,6 +291,7 @@ export function ParcelsProvider({ children }: { children: React.ReactNode }) {
         loading,
         refreshing,
         connectionError,
+        storageKind,
         toast,
         dismissToast,
         showToast,
