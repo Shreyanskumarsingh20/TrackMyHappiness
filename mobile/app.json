@@ -39,7 +39,8 @@
         {
           "color": "#0F766E"
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": false

@@ -31,7 +31,7 @@ export default function TabsLayout() {
         options={{
           title: "What's Coming",
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'cube' : 'cube-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'cube' : 'cube-outline'} size={size} color={color as string} />
           ),
         }}
       />
@@ -50,7 +50,7 @@ export default function TabsLayout() {
             <Ionicons
               name={focused ? 'notifications' : 'notifications-outline'}
               size={size}
-              color={color}
+              color={color as string}
             />
           ),
         }}
@@ -60,7 +60,7 @@ export default function TabsLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? 'options' : 'options-outline'} size={size} color={color} />
+            <Ionicons name={focused ? 'options' : 'options-outline'} size={size} color={color as string} />
           ),
         }}
       />
